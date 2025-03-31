@@ -1,10 +1,10 @@
 const nodemailer = require("nodemailer");
 
-// Create email transporter
+// Create transporter
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: process.env.SMTP_PORT,
-  secure: process.env.SMTP_PORT === "465",
+  secure: process.env.SMTP_SECURE === "true",
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
@@ -77,12 +77,10 @@ const templates = {
 };
 
 // Send email function
-const sendEmail = async (to, template, data) => {
+const sendEmail = async ({ to, subject, html }) => {
   try {
-    const { subject, html } = templates[template](data);
-
     const mailOptions = {
-      from: process.env.EMAIL_FROM,
+      from: process.env.SMTP_FROM,
       to,
       subject,
       html,
@@ -91,8 +89,8 @@ const sendEmail = async (to, template, data) => {
     await transporter.sendMail(mailOptions);
     return true;
   } catch (error) {
-    console.error("Email sending failed:", error);
-    return false;
+    console.error("Email sending error:", error);
+    throw new Error("Failed to send email");
   }
 };
 

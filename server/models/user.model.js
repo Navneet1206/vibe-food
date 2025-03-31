@@ -54,12 +54,30 @@ const userSchema = new mongoose.Schema(
         ref: "Vendor",
       },
     ],
-    orders: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Order",
+    cart: {
+      items: [
+        {
+          vendor: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Vendor",
+            required: true,
+          },
+          itemId: {
+            type: mongoose.Schema.Types.ObjectId,
+            required: true,
+          },
+          quantity: {
+            type: Number,
+            required: true,
+            min: 1,
+          },
+        },
+      ],
+      totalAmount: {
+        type: Number,
+        default: 0,
       },
-    ],
+    },
   },
   {
     timestamps: true,
@@ -94,6 +112,55 @@ userSchema.methods.generateEmailVerificationToken = function () {
 userSchema.methods.generatePasswordResetToken = function () {
   this.resetPasswordToken = crypto.randomBytes(32).toString("hex");
   this.resetPasswordExpires = Date.now() + 1 * 60 * 60 * 1000; // 1 hour
+};
+
+// Cart methods
+userSchema.methods.addToCart = function (vendorId, itemId, quantity) {
+  const cartItemIndex = this.cart.items.findIndex(
+    (item) =>
+      item.vendor.toString() === vendorId.toString() &&
+      item.itemId.toString() === itemId.toString()
+  );
+
+  if (cartItemIndex > -1) {
+    this.cart.items[cartItemIndex].quantity += quantity;
+  } else {
+    this.cart.items.push({
+      vendor: vendorId,
+      itemId,
+      quantity,
+    });
+  }
+
+  this.calculateCartTotal();
+};
+
+userSchema.methods.updateCartItem = function (itemId, quantity) {
+  const cartItemIndex = this.cart.items.findIndex(
+    (item) => item.itemId.toString() === itemId.toString()
+  );
+
+  if (cartItemIndex > -1) {
+    this.cart.items[cartItemIndex].quantity = quantity;
+    this.calculateCartTotal();
+  }
+};
+
+userSchema.methods.removeFromCart = function (itemId) {
+  this.cart.items = this.cart.items.filter(
+    (item) => item.itemId.toString() !== itemId.toString()
+  );
+  this.calculateCartTotal();
+};
+
+userSchema.methods.calculateCartTotal = async function () {
+  let total = 0;
+  for (const item of this.cart.items) {
+    const vendor = await mongoose.model("Vendor").findById(item.vendor);
+    const menuItem = vendor.menu.id(item.itemId);
+    total += menuItem.price * item.quantity;
+  }
+  this.cart.totalAmount = total;
 };
 
 const User = mongoose.model("User", userSchema);

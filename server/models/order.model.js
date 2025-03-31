@@ -125,51 +125,99 @@ orderSchema.index({ deliveryPartner: 1, createdAt: -1 });
 orderSchema.index({ status: 1 });
 orderSchema.index({ "deliveryAddress.coordinates": "2dsphere" });
 
-// Method to update order status
-orderSchema.methods.updateStatus = async function (newStatus, location = null) {
+// Helper methods
+orderSchema.methods.updateStatus = async function (newStatus, updatedBy) {
+  if (!this.isValidStatusTransition(newStatus)) {
+    throw new Error("Invalid status transition");
+  }
   this.status = newStatus;
-
-  // Add tracking information
-  this.tracking.push({
-    status: newStatus,
-    timestamp: new Date(),
-    location: location || this.tracking[this.tracking.length - 1]?.location,
-  });
-
-  // Update delivery time if order is delivered
   if (newStatus === "delivered") {
     this.actualDeliveryTime = new Date();
   }
-
   await this.save();
 };
 
-// Method to calculate delivery time
-orderSchema.methods.calculateDeliveryTime = function () {
-  const now = new Date();
-  // Add 30 minutes for preparation and 30 minutes for delivery
-  this.estimatedDeliveryTime = new Date(now.getTime() + 60 * 60 * 1000);
+orderSchema.methods.isValidStatusTransition = function (newStatus) {
+  const validTransitions = {
+    pending: ["confirmed", "cancelled"],
+    confirmed: ["preparing", "cancelled"],
+    preparing: ["ready_for_pickup", "cancelled"],
+    ready_for_pickup: ["assigned_to_delivery", "cancelled"],
+    assigned_to_delivery: ["picked_up", "cancelled"],
+    picked_up: ["on_the_way", "cancelled"],
+    on_the_way: ["delivered", "cancelled"],
+    delivered: [],
+    cancelled: [],
+  };
+
+  return validTransitions[this.status].includes(newStatus);
 };
 
-// Method to cancel order
 orderSchema.methods.cancelOrder = async function (reason, requestedBy) {
+  if (this.status === "delivered" || this.status === "cancelled") {
+    throw new Error("Cannot cancel order in current status");
+  }
   this.status = "cancelled";
   this.cancellationReason = reason;
   this.cancellationRequestedBy = requestedBy;
   await this.save();
 };
 
-// Method to complete payment
-orderSchema.methods.completePayment = async function () {
-  this.paymentStatus = "completed";
-  await this.save();
-};
-
-// Method to add review
 orderSchema.methods.addReview = async function (rating, review) {
+  if (this.status !== "delivered") {
+    throw new Error("Can only review delivered orders");
+  }
   this.rating = rating;
   this.review = review;
   await this.save();
+};
+
+orderSchema.methods.assignDeliveryPartner = async function (deliveryPartnerId) {
+  if (this.status !== "ready_for_pickup") {
+    throw new Error(
+      "Can only assign delivery partner when order is ready for pickup"
+    );
+  }
+  this.deliveryPartner = deliveryPartnerId;
+  this.status = "assigned_to_delivery";
+  await this.save();
+};
+
+orderSchema.methods.calculateDeliveryFee = function (distance) {
+  // Base delivery fee
+  let fee = 10;
+  // Add distance-based fee (e.g., $1 per km)
+  fee += distance;
+  return fee;
+};
+
+orderSchema.methods.calculateTax = function () {
+  // Assuming 10% tax rate
+  return this.totalAmount * 0.1;
+};
+
+orderSchema.methods.calculateFinalAmount = function () {
+  this.tax = this.calculateTax();
+  this.finalAmount = this.totalAmount + this.deliveryFee + this.tax;
+};
+
+// Static methods
+orderSchema.statics.getOrdersByStatus = function (status) {
+  return this.find({ status }).populate("user vendor deliveryPartner");
+};
+
+orderSchema.statics.getOrdersByUser = function (userId) {
+  return this.find({ user: userId }).populate("vendor deliveryPartner");
+};
+
+orderSchema.statics.getOrdersByVendor = function (vendorId) {
+  return this.find({ vendor: vendorId }).populate("user deliveryPartner");
+};
+
+orderSchema.statics.getOrdersByDeliveryPartner = function (deliveryPartnerId) {
+  return this.find({ deliveryPartner: deliveryPartnerId }).populate(
+    "user vendor"
+  );
 };
 
 const Order = mongoose.model("Order", orderSchema);

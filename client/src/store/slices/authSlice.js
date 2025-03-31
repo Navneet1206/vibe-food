@@ -99,74 +99,39 @@ export const getCurrentUser = createAsyncThunk(
   }
 );
 
-// Vendor authentication thunks
-export const vendorLogin = createAsyncThunk(
-  "auth/vendorLogin",
-  async (credentials, thunkAPI) => {
+export const updateProfile = createAsyncThunk(
+  "auth/updateProfile",
+  async (userData, { rejectWithValue }) => {
     try {
-      const response = await axios.post(
-        `${API_URL}/auth/vendor-login`,
-        credentials
-      );
-      localStorage.setItem("token", response.data.token);
+      const token = localStorage.getItem("token");
+      const response = await axios.put(`${API_URL}/users/profile`, userData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       return response.data;
     } catch (error) {
-      return thunkAPI.rejectWithValue(
-        error.response?.data || "Vendor login failed"
-      );
+      return rejectWithValue(error.response.data);
     }
   }
 );
 
-export const vendorRegister = createAsyncThunk(
-  "auth/vendorRegister",
-  async (vendorData, thunkAPI) => {
+export const updateProfilePicture = createAsyncThunk(
+  "auth/updateProfilePicture",
+  async (formData, { rejectWithValue }) => {
     try {
-      const response = await axios.post(
-        `${API_URL}/auth/vendor-register`,
-        vendorData
+      const token = localStorage.getItem("token");
+      const response = await axios.put(
+        `${API_URL}/users/profile-picture`,
+        formData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
+        }
       );
       return response.data;
     } catch (error) {
-      return thunkAPI.rejectWithValue(
-        error.response?.data || "Vendor registration failed"
-      );
-    }
-  }
-);
-
-// Delivery partner authentication thunks
-export const deliveryLogin = createAsyncThunk(
-  "auth/deliveryLogin",
-  async (credentials, thunkAPI) => {
-    try {
-      const response = await axios.post(
-        `${API_URL}/auth/delivery-login`,
-        credentials
-      );
-      localStorage.setItem("token", response.data.token);
-      return response.data;
-    } catch (error) {
-      return thunkAPI.rejectWithValue(
-        error.response?.data || "Delivery partner login failed"
-      );
-    }
-  }
-);
-
-export const deliveryRegister = createAsyncThunk(
-  "auth/deliveryRegister",
-  async (deliveryData, thunkAPI) => {
-    try {
-      const response = await axios.post(
-        `${API_URL}/auth/delivery-register`,
-        deliveryData
-      );
-      return response.data;
-    } catch (error) {
-      return thunkAPI.rejectWithValue(
-        error.response?.data || "Delivery partner registration failed"
-      );
+      return rejectWithValue(error.response.data);
     }
   }
 );
@@ -181,8 +146,6 @@ const initialState = {
   isAuthenticated: false,
   isLoading: false,
   error: null,
-  success: false,
-  message: null,
 };
 
 const authSlice = createSlice({
@@ -191,7 +154,6 @@ const authSlice = createSlice({
   reducers: {
     clearError: (state) => {
       state.error = null;
-      state.message = null;
     },
   },
   extraReducers: (builder) => {
@@ -200,14 +162,12 @@ const authSlice = createSlice({
       .addCase(login.pending, (state) => {
         state.isLoading = true;
         state.error = null;
-        state.success = false;
       })
       .addCase(login.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.user = action.payload.user;
         state.isAuthenticated = true;
-        state.success = true;
-        state.message = "Login successful";
+        state.user = action.payload.user;
+        state.token = action.payload.token;
       })
       .addCase(login.rejected, (state, action) => {
         state.isLoading = false;
@@ -217,30 +177,37 @@ const authSlice = createSlice({
       .addCase(register.pending, (state) => {
         state.isLoading = true;
         state.error = null;
-        state.success = false;
       })
       .addCase(register.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isAuthenticated = true;
         state.user = action.payload.user;
-        state.error = null;
-        state.success = true;
-        state.message = "Registration successful";
+        state.token = action.payload.token;
       })
       .addCase(register.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload?.message || "Registration failed";
       })
+      // Verify Email
+      .addCase(verifyEmail.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(verifyEmail.fulfilled, (state) => {
+        state.isLoading = false;
+        state.user.isEmailVerified = true;
+      })
+      .addCase(verifyEmail.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
+      })
       // Forgot Password
       .addCase(forgotPassword.pending, (state) => {
         state.isLoading = true;
         state.error = null;
-        state.success = false;
       })
-      .addCase(forgotPassword.fulfilled, (state, action) => {
+      .addCase(forgotPassword.fulfilled, (state) => {
         state.isLoading = false;
-        state.success = true;
-        state.message = "Password reset link sent to your email";
       })
       .addCase(forgotPassword.rejected, (state, action) => {
         state.isLoading = false;
@@ -250,12 +217,9 @@ const authSlice = createSlice({
       .addCase(resetPassword.pending, (state) => {
         state.isLoading = true;
         state.error = null;
-        state.success = false;
       })
-      .addCase(resetPassword.fulfilled, (state, action) => {
+      .addCase(resetPassword.fulfilled, (state) => {
         state.isLoading = false;
-        state.success = true;
-        state.message = "Password reset successful";
       })
       .addCase(resetPassword.rejected, (state, action) => {
         state.isLoading = false;
@@ -270,59 +234,50 @@ const authSlice = createSlice({
         state.isLoading = false;
         state.isAuthenticated = true;
         state.user = action.payload;
-        state.error = null;
       })
       .addCase(getCurrentUser.rejected, (state, action) => {
         state.isLoading = false;
         state.isAuthenticated = false;
         state.user = null;
-        state.error = action.payload || "Failed to get user data";
+        state.token = null;
+        state.error = action.payload;
+      })
+      // Update Profile
+      .addCase(updateProfile.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(updateProfile.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.user = action.payload;
+      })
+      .addCase(updateProfile.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload?.message || "Failed to update profile";
+      })
+      // Update Profile Picture
+      .addCase(updateProfilePicture.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(updateProfilePicture.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.user = action.payload;
+      })
+      .addCase(updateProfilePicture.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error =
+          action.payload?.message || "Failed to update profile picture";
       })
       // Logout
       .addCase(logout.fulfilled, (state) => {
         state.user = null;
         state.token = null;
         state.isAuthenticated = false;
-        state.error = null;
-        state.success = false;
-        state.message = null;
-      })
-      // Vendor Login
-      .addCase(vendorLogin.pending, (state) => {
-        state.isLoading = true;
-        state.error = null;
-        state.success = false;
-      })
-      .addCase(vendorLogin.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.isAuthenticated = true;
-        state.user = action.payload.vendor;
-        state.token = action.payload.token;
-        state.success = true;
-      })
-      .addCase(vendorLogin.rejected, (state, action) => {
-        state.isLoading = false;
-        state.error = action.payload;
-      })
-      // Delivery Login
-      .addCase(deliveryLogin.pending, (state) => {
-        state.isLoading = true;
-        state.error = null;
-        state.success = false;
-      })
-      .addCase(deliveryLogin.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.isAuthenticated = true;
-        state.user = action.payload.deliveryPartner;
-        state.token = action.payload.token;
-        state.success = true;
-      })
-      .addCase(deliveryLogin.rejected, (state, action) => {
-        state.isLoading = false;
-        state.error = action.payload;
       });
   },
 });
 
 export const { clearError } = authSlice.actions;
+
 export default authSlice.reducer;

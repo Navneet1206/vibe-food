@@ -35,14 +35,14 @@ const upload = multer({
 });
 
 // Upload single image
-const uploadSingle = (fieldName) => upload.single(fieldName);
+exports.uploadSingle = (fieldName) => upload.single(fieldName);
 
 // Upload multiple images
-const uploadMultiple = (fieldName, maxCount) =>
+exports.uploadMultiple = (fieldName, maxCount) =>
   upload.array(fieldName, maxCount);
 
 // Delete image from Cloudinary
-const deleteImage = async (publicId) => {
+exports.deleteImage = async (publicId) => {
   try {
     await cloudinary.uploader.destroy(publicId);
     return true;
@@ -53,12 +53,12 @@ const deleteImage = async (publicId) => {
 };
 
 // Get image URL
-const getImageUrl = (publicId, options = {}) => {
+exports.getImageUrl = (publicId, options = {}) => {
   return cloudinary.url(publicId, options);
 };
 
 // Upload base64 image
-const uploadBase64 = async (base64String, folder = "gatiyan-food") => {
+exports.uploadBase64 = async (base64String, folder = "gatiyan-food") => {
   try {
     const result = await cloudinary.uploader.upload(base64String, {
       folder,
@@ -69,13 +69,4 @@ const uploadBase64 = async (base64String, folder = "gatiyan-food") => {
     console.error("Error uploading base64 image:", error);
     throw error;
   }
-};
-
-module.exports = {
-  uploadSingle,
-  uploadMultiple,
-  deleteImage,
-  getImageUrl,
-  uploadBase64,
-  cloudinary,
 };

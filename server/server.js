@@ -14,18 +14,20 @@ const app = express();
 
 // CORS configuration
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? 'https://your-production-domain.com' 
-    : 'http://localhost:3000',
+  origin:
+    process.env.NODE_ENV === "production"
+      ? "https://your-production-domain.com"
+      : "http://localhost:3000",
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 };
 
 // Middleware
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // API Documentation
 const swaggerDocument = YAML.load(
@@ -42,8 +44,8 @@ app.use("/api/orders", require("./routes/order.routes"));
 app.use("/api/admin", require("./routes/admin.routes"));
 
 // Health check route
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', message: 'Server is running' });
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok", message: "Server is running" });
 });
 
 // 404 handler

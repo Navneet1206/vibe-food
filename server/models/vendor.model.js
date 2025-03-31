@@ -1,6 +1,59 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
+const menuItemSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+    trim: true,
+  },
+  description: {
+    type: String,
+    trim: true,
+  },
+  price: {
+    type: Number,
+    required: true,
+    min: 0,
+  },
+  category: {
+    type: String,
+    required: true,
+    trim: true,
+  },
+  image: {
+    type: String,
+    default: null,
+  },
+  isAvailable: {
+    type: Boolean,
+    default: true,
+  },
+  preparationTime: {
+    type: Number, // in minutes
+    required: true,
+    min: 0,
+  },
+  ingredients: [
+    {
+      type: String,
+      trim: true,
+    },
+  ],
+  allergens: [
+    {
+      type: String,
+      trim: true,
+    },
+  ],
+  nutritionalInfo: {
+    calories: Number,
+    protein: Number,
+    carbs: Number,
+    fat: Number,
+  },
+});
+
 const vendorSchema = new mongoose.Schema(
   {
     name: {
@@ -97,19 +150,7 @@ const vendorSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-    menu: [
-      {
-        name: String,
-        description: String,
-        price: Number,
-        category: String,
-        image: String,
-        isAvailable: {
-          type: Boolean,
-          default: true,
-        },
-      },
-    ],
+    menu: [menuItemSchema],
     orders: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -164,6 +205,28 @@ vendorSchema.methods.updateAnalytics = async function (orderAmount) {
   this.analytics.averageOrderValue =
     this.analytics.totalRevenue / this.analytics.totalOrders;
   await this.save();
+};
+
+// Menu methods
+vendorSchema.methods.addMenuItem = function (menuItem) {
+  this.menu.push(menuItem);
+};
+
+vendorSchema.methods.updateMenuItem = function (itemId, updates) {
+  const item = this.menu.id(itemId);
+  if (item) {
+    Object.assign(item, updates);
+  }
+};
+
+vendorSchema.methods.removeMenuItem = function (itemId) {
+  this.menu = this.menu.filter(
+    (item) => item._id.toString() !== itemId.toString()
+  );
+};
+
+vendorSchema.methods.getMenuByCategory = function (category) {
+  return this.menu.filter((item) => item.category === category);
 };
 
 const Vendor = mongoose.model("Vendor", vendorSchema);
