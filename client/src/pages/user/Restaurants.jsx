@@ -13,10 +13,12 @@ const Restaurants = () => {
         const fetchRestaurants = async () => {
             try {
                 const response = await axios.get(`${import.meta.env.VITE_API_URL}/restaurants`);
-                setRestaurants(response.data);
-                setFilteredRestaurants(response.data);
+                const data = response.data || [];
+                setRestaurants(data);
+                setFilteredRestaurants(data);
                 setLoading(false);
             } catch (err) {
+                console.error('Error fetching restaurants:', err);
                 setError('Failed to fetch restaurants');
                 setLoading(false);
             }
@@ -26,12 +28,23 @@ const Restaurants = () => {
     }, []);
 
     useEffect(() => {
+        if (!Array.isArray(restaurants)) {
+            setFilteredRestaurants([]);
+            return;
+        }
+
         const filtered = restaurants.filter(restaurant =>
             restaurant.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             restaurant.cuisine.toLowerCase().includes(searchTerm.toLowerCase())
         );
         setFilteredRestaurants(filtered);
     }, [searchTerm, restaurants]);
+
+    const formatAddress = (address) => {
+        if (!address) return 'Address not available';
+        const { street, city, state, zipCode, country } = address;
+        return `${street}, ${city}, ${state} ${zipCode}, ${country}`;
+    };
 
     if (loading) {
         return (
@@ -86,7 +99,7 @@ const Restaurants = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredRestaurants.map((restaurant) => (
+                {Array.isArray(filteredRestaurants) && filteredRestaurants.map((restaurant) => (
                     <Link
                         key={restaurant._id}
                         to={`/restaurants/${restaurant._id}`}
@@ -94,55 +107,37 @@ const Restaurants = () => {
                     >
                         <div className="relative h-48">
                             <img
-                                src={restaurant.image || 'https://via.placeholder.com/400x200'}
+                                src={restaurant.image || '/images/restaurant-placeholder.jpg'}
                                 alt={restaurant.name}
                                 className="w-full h-full object-cover"
                             />
-                            <div className="absolute top-2 right-2 bg-primary text-white px-2 py-1 rounded-full text-sm">
-                                {restaurant.rating} ★
-                            </div>
+                            {restaurant.isOpen ? (
+                                <span className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded-full text-sm">
+                                    Open
+                                </span>
+                            ) : (
+                                <span className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded-full text-sm">
+                                    Closed
+                                </span>
+                            )}
                         </div>
                         <div className="p-4">
-                            <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                                {restaurant.name}
-                            </h2>
+                            <h2 className="text-xl font-semibold text-gray-900 mb-2">{restaurant.name}</h2>
                             <p className="text-gray-600 mb-2">{restaurant.cuisine}</p>
-                            <div className="flex items-center text-gray-500 text-sm">
-                                <svg
-                                    className="h-4 w-4 mr-1"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                                    />
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                                    />
-                                </svg>
-                                {restaurant.address}
-                            </div>
-                            <div className="mt-4 flex items-center justify-between">
-                                <span className="text-primary font-semibold">
-                                    {restaurant.deliveryTime} min
-                                </span>
-                                <span className="text-gray-600">
-                                    Min. ₹{restaurant.minOrder}
-                                </span>
+                            <p className="text-gray-500 text-sm mb-2">{formatAddress(restaurant.address)}</p>
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center">
+                                    <span className="text-yellow-500">★</span>
+                                    <span className="ml-1 text-gray-600">{restaurant.rating || 'N/A'}</span>
+                                </div>
+                                <span className="text-gray-600">{restaurant.deliveryTime || '30-45'} min</span>
                             </div>
                         </div>
                     </Link>
                 ))}
             </div>
 
-            {filteredRestaurants.length === 0 && (
+            {(!Array.isArray(filteredRestaurants) || filteredRestaurants.length === 0) && (
                 <div className="text-center py-12">
                     <p className="text-gray-500 text-lg">
                         No restaurants found matching your search.

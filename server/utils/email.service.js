@@ -13,6 +13,16 @@ const transporter = nodemailer.createTransport({
 
 // Email templates
 const templates = {
+  contactForm: (data) => ({
+    subject: "New Contact Form Submission",
+    html: `
+      <h1>New Contact Form Submission</h1>
+      <p><strong>Name:</strong> ${data.name}</p>
+      <p><strong>Email:</strong> ${data.email}</p>
+      <p><strong>Message:</strong></p>
+      <p>${data.message}</p>
+    `,
+  }),
   verificationEmail: (token) => ({
     subject: "Verify Your Email Address",
     html: `
@@ -25,7 +35,7 @@ const templates = {
       <p>If you didn't create an account, please ignore this email.</p>
     `,
   }),
-  passwordReset: (token) => ({
+  resetPassword: (token) => ({
     subject: "Reset Your Password",
     html: `
       <h1>Password Reset Request</h1>
@@ -76,25 +86,19 @@ const templates = {
   }),
 };
 
-// Send email function
-const sendEmail = async ({ to, subject, html }) => {
+const sendEmail = async (to, type, data) => {
   try {
-    const mailOptions = {
+    const template = templates[type](data);
+    await transporter.sendMail({
       from: process.env.SMTP_FROM,
       to,
-      subject,
-      html,
-    };
-
-    await transporter.sendMail(mailOptions);
-    return true;
+      subject: template.subject,
+      html: template.html,
+    });
   } catch (error) {
     console.error("Email sending error:", error);
     throw new Error("Failed to send email");
   }
 };
 
-module.exports = {
-  sendEmail,
-  templates,
-};
+module.exports = { sendEmail };

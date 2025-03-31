@@ -1,8 +1,12 @@
 const express = require("express");
 const router = express.Router();
 const { body } = require("express-validator");
+const {
+  verifyToken,
+  isAuthenticated,
+} = require("../middleware/auth.middleware");
 const authController = require("../controllers/auth.controller");
-const { uploadSingle } = require("../utils/cloudinary.service");
+const cloudinaryService = require("../utils/cloudinary.service");
 
 // Validation middleware
 const registerValidation = [
@@ -33,11 +37,9 @@ const newPasswordValidation = [
     .withMessage("Password must be at least 6 characters long"),
 ];
 
-// User routes
+// Public routes
 router.post("/register", registerValidation, authController.register);
 router.post("/login", loginValidation, authController.login);
-router.post("/verify-email/:token", authController.verifyEmail);
-router.post("/resend-verification", authController.resendVerification);
 router.post(
   "/forgot-password",
   resetPasswordValidation,
@@ -48,12 +50,20 @@ router.post(
   newPasswordValidation,
   authController.resetPassword
 );
+router.post("/verify-email", authController.verifyEmail);
+
+// Protected routes
+router.use(verifyToken, isAuthenticated);
+router.post("/logout", authController.logout);
+router.get("/me", authController.getCurrentUser);
+router.put("/profile", authController.updateProfile);
+router.put("/change-password", authController.changePassword);
 
 // Vendor routes
 router.post(
   "/vendor/register",
   registerValidation,
-  uploadSingle("logo"),
+  cloudinaryService.uploadSingle("logo"),
   authController.vendorRegister
 );
 router.post("/vendor/login", loginValidation, authController.vendorLogin);
@@ -77,7 +87,7 @@ router.post(
 router.post(
   "/delivery/register",
   registerValidation,
-  uploadSingle("profilePicture"),
+  cloudinaryService.uploadSingle("profilePicture"),
   authController.deliveryRegister
 );
 router.post("/delivery/login", loginValidation, authController.deliveryLogin);

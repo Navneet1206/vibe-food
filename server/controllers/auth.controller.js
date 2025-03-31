@@ -2,7 +2,7 @@ const jwt = require("jsonwebtoken");
 const { validationResult } = require("express-validator");
 const User = require("../models/user.model");
 const Vendor = require("../models/vendor.model");
-const DeliveryPartner = require("../models/delivery.model");
+const DeliveryPartner = require("../models/deliveryPartner.model");
 const { sendEmail } = require("../utils/email.service");
 
 // Generate JWT token
@@ -12,741 +12,869 @@ const generateToken = (id, role) => {
   });
 };
 
-// User Authentication
-exports.register = async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
+const authController = {
+  // User Authentication
+  register: async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
 
-    const { name, email, password, phone } = req.body;
+      const { name, email, password, phone } = req.body;
 
-    // Check if user exists
-    let user = await User.findOne({ email });
-    if (user) {
-      return res.status(400).json({
+      // Check if user exists
+      let user = await User.findOne({ email });
+      if (user) {
+        return res.status(400).json({
+          success: false,
+          message: "User already exists",
+        });
+      }
+
+      // Create user
+      user = new User({
+        name,
+        email,
+        password,
+        phone,
+      });
+
+      // Generate verification token
+      user.generateEmailVerificationToken();
+      await user.save();
+
+      // Send verification email
+      await sendEmail(email, "verificationEmail", user.emailVerificationToken);
+
+      res.status(201).json({
+        success: true,
+        message:
+          "Registration successful. Please check your email to verify your account.",
+      });
+    } catch (error) {
+      console.error("Registration error:", error);
+      res.status(500).json({
         success: false,
-        message: "User already exists",
+        message: "Error during registration",
       });
     }
+  },
 
-    // Create user
-    user = new User({
-      name,
-      email,
-      password,
-      phone,
-    });
+  login: async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
 
-    // Generate verification token
-    user.generateEmailVerificationToken();
-    await user.save();
+      const { email, password } = req.body;
 
-    // Send verification email
-    await sendEmail(email, "verificationEmail", user.emailVerificationToken);
+      // Find user
+      const user = await User.findOne({ email });
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid credentials",
+        });
+      }
 
-    res.status(201).json({
-      success: true,
-      message:
-        "Registration successful. Please check your email to verify your account.",
-    });
-  } catch (error) {
-    console.error("Registration error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
+      // Check password
+      const isMatch = await user.comparePassword(password);
+      if (!isMatch) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid credentials",
+        });
+      }
+
+      // Check if email is verified
+      if (!user.isEmailVerified) {
+        return res.status(401).json({
+          success: false,
+          message: "Please verify your email first",
+        });
+      }
+
+      // Generate token
+      const token = generateToken(user._id, "user");
+
+      res.json({
+        success: true,
+        token,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: "user",
+        },
+      });
+    } catch (error) {
+      console.error("Login error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error during login",
+      });
+    }
+  },
+
+  logout: async (req, res) => {
+    try {
+      // Since we're using JWT, we don't need to do anything server-side
+      // The client should remove the token from localStorage
+      res.status(200).json({
+        success: true,
+        message: "Logged out successfully",
+      });
+    } catch (error) {
+      console.error("Logout error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error during logout",
+      });
+    }
+  },
+
+  getCurrentUser: async (req, res) => {
+    try {
+      const user = await User.findById(req.user.id).select("-password");
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      res.json({
+        success: true,
+        user,
+      });
+    } catch (error) {
+      console.error("Get current user error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error fetching user data",
+      });
+    }
+  },
+
+  updateProfile: async (req, res) => {
+    try {
+      const { name, phone } = req.body;
+      const user = await User.findById(req.user.id);
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      user.name = name || user.name;
+      user.phone = phone || user.phone;
+
+      await user.save();
+
+      res.json({
+        success: true,
+        user,
+      });
+    } catch (error) {
+      console.error("Update profile error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error updating profile",
+      });
+    }
+  },
+
+  changePassword: async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      const user = await User.findById(req.user.id);
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      // Check current password
+      const isMatch = await user.comparePassword(currentPassword);
+      if (!isMatch) {
+        return res.status(401).json({
+          success: false,
+          message: "Current password is incorrect",
+        });
+      }
+
+      // Update password
+      user.password = newPassword;
+      await user.save();
+
+      res.json({
+        success: true,
+        message: "Password updated successfully",
+      });
+    } catch (error) {
+      console.error("Change password error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error changing password",
+      });
+    }
+  },
+
+  forgotPassword: async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { email } = req.body;
+      const user = await User.findOne({ email });
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      // Generate reset token
+      user.generatePasswordResetToken();
+      await user.save();
+
+      // Send reset email
+      await sendEmail(email, "resetPassword", user.resetPasswordToken);
+
+      res.json({
+        success: true,
+        message: "Password reset instructions sent to your email",
+      });
+    } catch (error) {
+      console.error("Forgot password error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error processing forgot password request",
+      });
+    }
+  },
+
+  resetPassword: async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { token, password } = req.body;
+
+      // Find user by reset token
+      const user = await User.findOne({
+        resetPasswordToken: token,
+        resetPasswordExpires: { $gt: Date.now() },
+      });
+
+      if (!user) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid or expired reset token",
+        });
+      }
+
+      // Update password
+      user.password = password;
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      await user.save();
+
+      res.json({
+        success: true,
+        message: "Password reset successfully",
+      });
+    } catch (error) {
+      console.error("Reset password error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error resetting password",
+      });
+    }
+  },
+
+  verifyEmail: async (req, res) => {
+    try {
+      const { token } = req.body;
+
+      // Find user with this verification token
+      const user = await User.findOne({
+        emailVerificationToken: token,
+        emailVerificationExpires: { $gt: Date.now() },
+      });
+
+      if (!user) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid or expired verification token",
+        });
+      }
+
+      // Update user verification status
+      user.isEmailVerified = true;
+      user.emailVerificationToken = undefined;
+      user.emailVerificationExpires = undefined;
+      await user.save();
+
+      res.status(200).json({
+        success: true,
+        message: "Email verified successfully",
+      });
+    } catch (error) {
+      console.error("Email verification error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error verifying email",
+      });
+    }
+  },
+
+  // Vendor Authentication
+  vendorRegister: async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { name, email, password, phone, address } = req.body;
+      const logo = req.file?.path;
+
+      // Check if vendor exists
+      let vendor = await Vendor.findOne({ email });
+      if (vendor) {
+        return res.status(400).json({
+          success: false,
+          message: "Vendor already exists",
+        });
+      }
+
+      // Create vendor
+      vendor = new Vendor({
+        name,
+        email,
+        password,
+        phone,
+        address,
+        logo,
+      });
+
+      // Generate verification token
+      vendor.generateEmailVerificationToken();
+      await vendor.save();
+
+      // Send verification email
+      await sendEmail(
+        email,
+        "verificationEmail",
+        vendor.emailVerificationToken
+      );
+
+      res.status(201).json({
+        success: true,
+        message:
+          "Registration successful. Please check your email to verify your account.",
+      });
+    } catch (error) {
+      console.error("Vendor registration error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error during vendor registration",
+      });
+    }
+  },
+
+  vendorLogin: async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { email, password } = req.body;
+
+      // Find vendor
+      const vendor = await Vendor.findOne({ email });
+      if (!vendor) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid credentials",
+        });
+      }
+
+      // Check password
+      const isMatch = await vendor.comparePassword(password);
+      if (!isMatch) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid credentials",
+        });
+      }
+
+      // Check if email is verified
+      if (!vendor.isEmailVerified) {
+        return res.status(401).json({
+          success: false,
+          message: "Please verify your email first",
+        });
+      }
+
+      // Generate token
+      const token = generateToken(vendor._id, "vendor");
+
+      res.json({
+        success: true,
+        token,
+        vendor: {
+          id: vendor._id,
+          name: vendor.name,
+          email: vendor.email,
+          role: "vendor",
+        },
+      });
+    } catch (error) {
+      console.error("Vendor login error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error during vendor login",
+      });
+    }
+  },
+
+  verifyVendorEmail: async (req, res) => {
+    try {
+      const { token } = req.params;
+
+      const vendor = await Vendor.findOne({
+        emailVerificationToken: token,
+        emailVerificationExpires: { $gt: Date.now() },
+      });
+
+      if (!vendor) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid or expired verification token",
+        });
+      }
+
+      vendor.isEmailVerified = true;
+      vendor.emailVerificationToken = undefined;
+      vendor.emailVerificationExpires = undefined;
+      await vendor.save();
+
+      res.json({
+        success: true,
+        message: "Email verified successfully",
+      });
+    } catch (error) {
+      console.error("Vendor email verification error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error verifying vendor email",
+      });
+    }
+  },
+
+  resendVendorVerification: async (req, res) => {
+    try {
+      const { email } = req.body;
+      const vendor = await Vendor.findOne({ email });
+
+      if (!vendor) {
+        return res.status(404).json({
+          success: false,
+          message: "Vendor not found",
+        });
+      }
+
+      if (vendor.isEmailVerified) {
+        return res.status(400).json({
+          success: false,
+          message: "Email is already verified",
+        });
+      }
+
+      // Generate new verification token
+      vendor.generateEmailVerificationToken();
+      await vendor.save();
+
+      // Send verification email
+      await sendEmail(
+        email,
+        "verificationEmail",
+        vendor.emailVerificationToken
+      );
+
+      res.json({
+        success: true,
+        message: "Verification email sent successfully",
+      });
+    } catch (error) {
+      console.error("Resend vendor verification error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error resending verification email",
+      });
+    }
+  },
+
+  vendorForgotPassword: async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { email } = req.body;
+      const vendor = await Vendor.findOne({ email });
+
+      if (!vendor) {
+        return res.status(404).json({
+          success: false,
+          message: "Vendor not found",
+        });
+      }
+
+      // Generate reset token
+      vendor.generatePasswordResetToken();
+      await vendor.save();
+
+      // Send reset email
+      await sendEmail(email, "resetPassword", vendor.resetPasswordToken);
+
+      res.json({
+        success: true,
+        message: "Password reset instructions sent to your email",
+      });
+    } catch (error) {
+      console.error("Vendor forgot password error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error processing forgot password request",
+      });
+    }
+  },
+
+  vendorResetPassword: async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { token, password } = req.body;
+
+      // Find vendor by reset token
+      const vendor = await Vendor.findOne({
+        resetPasswordToken: token,
+        resetPasswordExpires: { $gt: Date.now() },
+      });
+
+      if (!vendor) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid or expired reset token",
+        });
+      }
+
+      // Update password
+      vendor.password = password;
+      vendor.resetPasswordToken = undefined;
+      vendor.resetPasswordExpires = undefined;
+      await vendor.save();
+
+      res.json({
+        success: true,
+        message: "Password reset successfully",
+      });
+    } catch (error) {
+      console.error("Vendor reset password error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error resetting password",
+      });
+    }
+  },
+
+  // Delivery Partner Authentication
+  deliveryRegister: async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { name, email, password, phone, vehicleType, vehicleNumber } =
+        req.body;
+      const profilePicture = req.file?.path;
+
+      // Check if delivery partner exists
+      let partner = await DeliveryPartner.findOne({ email });
+      if (partner) {
+        return res.status(400).json({
+          success: false,
+          message: "Delivery partner already exists",
+        });
+      }
+
+      // Create delivery partner
+      partner = new DeliveryPartner({
+        name,
+        email,
+        password,
+        phone,
+        vehicleType,
+        vehicleNumber,
+        profilePicture,
+      });
+
+      // Generate verification token
+      partner.generateEmailVerificationToken();
+      await partner.save();
+
+      // Send verification email
+      await sendEmail(
+        email,
+        "verificationEmail",
+        partner.emailVerificationToken
+      );
+
+      res.status(201).json({
+        success: true,
+        message:
+          "Registration successful. Please check your email to verify your account.",
+      });
+    } catch (error) {
+      console.error("Delivery partner registration error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error during delivery partner registration",
+      });
+    }
+  },
+
+  deliveryLogin: async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { email, password } = req.body;
+
+      // Find delivery partner
+      const partner = await DeliveryPartner.findOne({ email });
+      if (!partner) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid credentials",
+        });
+      }
+
+      // Check password
+      const isMatch = await partner.comparePassword(password);
+      if (!isMatch) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid credentials",
+        });
+      }
+
+      // Check if email is verified
+      if (!partner.isEmailVerified) {
+        return res.status(401).json({
+          success: false,
+          message: "Please verify your email first",
+        });
+      }
+
+      // Generate token
+      const token = generateToken(partner._id, "delivery");
+
+      res.json({
+        success: true,
+        token,
+        partner: {
+          id: partner._id,
+          name: partner.name,
+          email: partner.email,
+          role: "delivery",
+        },
+      });
+    } catch (error) {
+      console.error("Delivery partner login error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error during delivery partner login",
+      });
+    }
+  },
+
+  verifyDeliveryEmail: async (req, res) => {
+    try {
+      const { token } = req.params;
+
+      const partner = await DeliveryPartner.findOne({
+        emailVerificationToken: token,
+        emailVerificationExpires: { $gt: Date.now() },
+      });
+
+      if (!partner) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid or expired verification token",
+        });
+      }
+
+      partner.isEmailVerified = true;
+      partner.emailVerificationToken = undefined;
+      partner.emailVerificationExpires = undefined;
+      await partner.save();
+
+      res.json({
+        success: true,
+        message: "Email verified successfully",
+      });
+    } catch (error) {
+      console.error("Delivery partner email verification error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error verifying delivery partner email",
+      });
+    }
+  },
+
+  resendDeliveryVerification: async (req, res) => {
+    try {
+      const { email } = req.body;
+      const partner = await DeliveryPartner.findOne({ email });
+
+      if (!partner) {
+        return res.status(404).json({
+          success: false,
+          message: "Delivery partner not found",
+        });
+      }
+
+      if (partner.isEmailVerified) {
+        return res.status(400).json({
+          success: false,
+          message: "Email is already verified",
+        });
+      }
+
+      // Generate new verification token
+      partner.generateEmailVerificationToken();
+      await partner.save();
+
+      // Send verification email
+      await sendEmail(
+        email,
+        "verificationEmail",
+        partner.emailVerificationToken
+      );
+
+      res.json({
+        success: true,
+        message: "Verification email sent successfully",
+      });
+    } catch (error) {
+      console.error("Resend delivery partner verification error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error resending verification email",
+      });
+    }
+  },
+
+  deliveryForgotPassword: async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { email } = req.body;
+      const partner = await DeliveryPartner.findOne({ email });
+
+      if (!partner) {
+        return res.status(404).json({
+          success: false,
+          message: "Delivery partner not found",
+        });
+      }
+
+      // Generate reset token
+      partner.generatePasswordResetToken();
+      await partner.save();
+
+      // Send reset email
+      await sendEmail(email, "resetPassword", partner.resetPasswordToken);
+
+      res.json({
+        success: true,
+        message: "Password reset instructions sent to your email",
+      });
+    } catch (error) {
+      console.error("Delivery partner forgot password error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error processing forgot password request",
+      });
+    }
+  },
+
+  deliveryResetPassword: async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { token, password } = req.body;
+
+      // Find delivery partner by reset token
+      const partner = await DeliveryPartner.findOne({
+        resetPasswordToken: token,
+        resetPasswordExpires: { $gt: Date.now() },
+      });
+
+      if (!partner) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid or expired reset token",
+        });
+      }
+
+      // Update password
+      partner.password = password;
+      partner.resetPasswordToken = undefined;
+      partner.resetPasswordExpires = undefined;
+      await partner.save();
+
+      res.json({
+        success: true,
+        message: "Password reset successfully",
+      });
+    } catch (error) {
+      console.error("Delivery partner reset password error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error resetting password",
+      });
+    }
+  },
 };
 
-exports.login = async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { email, password } = req.body;
-
-    // Check if user exists
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-      });
-    }
-
-    // Check password
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-      });
-    }
-
-    // Check if email is verified
-    if (!user.isEmailVerified) {
-      return res.status(403).json({
-        success: false,
-        message: "Please verify your email address",
-      });
-    }
-
-    // Generate token
-    const token = generateToken(user._id, user.role);
-
-    res.json({
-      success: true,
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
-    });
-  } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-exports.verifyEmail = async (req, res) => {
-  try {
-    const { token } = req.params;
-    const user = await User.findOne({ emailVerificationToken: token });
-
-    if (!user) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid verification token",
-      });
-    }
-
-    user.isEmailVerified = true;
-    user.emailVerificationToken = undefined;
-    await user.save();
-
-    res.json({
-      success: true,
-      message: "Email verified successfully",
-    });
-  } catch (error) {
-    console.error("Email verification error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-exports.resendVerification = async (req, res) => {
-  try {
-    const { email } = req.body;
-    const user = await User.findOne({ email });
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    if (user.isEmailVerified) {
-      return res.status(400).json({
-        success: false,
-        message: "Email is already verified",
-      });
-    }
-
-    user.generateEmailVerificationToken();
-    await user.save();
-
-    await sendEmail(email, "verificationEmail", user.emailVerificationToken);
-
-    res.json({
-      success: true,
-      message: "Verification email sent successfully",
-    });
-  } catch (error) {
-    console.error("Resend verification error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-exports.forgotPassword = async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { email } = req.body;
-    const user = await User.findOne({ email });
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    user.generatePasswordResetToken();
-    await user.save();
-
-    await sendEmail(email, "resetPassword", user.passwordResetToken);
-
-    res.json({
-      success: true,
-      message: "Password reset email sent successfully",
-    });
-  } catch (error) {
-    console.error("Forgot password error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-exports.resetPassword = async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { token, password } = req.body;
-    const user = await User.findOne({ passwordResetToken: token });
-
-    if (!user) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid reset token",
-      });
-    }
-
-    user.password = password;
-    user.passwordResetToken = undefined;
-    await user.save();
-
-    res.json({
-      success: true,
-      message: "Password reset successfully",
-    });
-  } catch (error) {
-    console.error("Reset password error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-// Vendor Authentication
-exports.vendorRegister = async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { name, email, password, phone, cuisine, address } = req.body;
-    const logo = req.file ? req.file.path : undefined;
-
-    // Check if vendor exists
-    let vendor = await Vendor.findOne({ email });
-    if (vendor) {
-      return res.status(400).json({
-        success: false,
-        message: "Vendor already exists",
-      });
-    }
-
-    // Create vendor
-    vendor = new Vendor({
-      name,
-      email,
-      password,
-      phone,
-      cuisine,
-      address,
-      logo,
-    });
-
-    // Generate verification token
-    vendor.generateEmailVerificationToken();
-    await vendor.save();
-
-    // Send verification email
-    await sendEmail(email, "verificationEmail", vendor.emailVerificationToken);
-
-    res.status(201).json({
-      success: true,
-      message:
-        "Registration successful. Please check your email to verify your account.",
-    });
-  } catch (error) {
-    console.error("Vendor registration error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-exports.vendorLogin = async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { email, password } = req.body;
-
-    // Check if vendor exists
-    const vendor = await Vendor.findOne({ email });
-    if (!vendor) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-      });
-    }
-
-    // Check password
-    const isMatch = await vendor.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-      });
-    }
-
-    // Check if email is verified
-    if (!vendor.isEmailVerified) {
-      return res.status(403).json({
-        success: false,
-        message: "Please verify your email address",
-      });
-    }
-
-    // Generate token
-    const token = generateToken(vendor._id, "vendor");
-
-    res.json({
-      success: true,
-      token,
-      vendor: {
-        id: vendor._id,
-        name: vendor.name,
-        email: vendor.email,
-        cuisine: vendor.cuisine,
-        logo: vendor.logo,
-      },
-    });
-  } catch (error) {
-    console.error("Vendor login error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-exports.verifyVendorEmail = async (req, res) => {
-  try {
-    const { token } = req.params;
-    const vendor = await Vendor.findOne({ emailVerificationToken: token });
-
-    if (!vendor) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid verification token",
-      });
-    }
-
-    vendor.isEmailVerified = true;
-    vendor.emailVerificationToken = undefined;
-    await vendor.save();
-
-    res.json({
-      success: true,
-      message: "Email verified successfully",
-    });
-  } catch (error) {
-    console.error("Vendor email verification error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-exports.resendVendorVerification = async (req, res) => {
-  try {
-    const { email } = req.body;
-    const vendor = await Vendor.findOne({ email });
-
-    if (!vendor) {
-      return res.status(404).json({
-        success: false,
-        message: "Vendor not found",
-      });
-    }
-
-    if (vendor.isEmailVerified) {
-      return res.status(400).json({
-        success: false,
-        message: "Email is already verified",
-      });
-    }
-
-    vendor.generateEmailVerificationToken();
-    await vendor.save();
-
-    await sendEmail(email, "verificationEmail", vendor.emailVerificationToken);
-
-    res.json({
-      success: true,
-      message: "Verification email sent successfully",
-    });
-  } catch (error) {
-    console.error("Resend vendor verification error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-exports.vendorForgotPassword = async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { email } = req.body;
-    const vendor = await Vendor.findOne({ email });
-
-    if (!vendor) {
-      return res.status(404).json({
-        success: false,
-        message: "Vendor not found",
-      });
-    }
-
-    vendor.generatePasswordResetToken();
-    await vendor.save();
-
-    await sendEmail(email, "resetPassword", vendor.passwordResetToken);
-
-    res.json({
-      success: true,
-      message: "Password reset email sent successfully",
-    });
-  } catch (error) {
-    console.error("Vendor forgot password error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-exports.vendorResetPassword = async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { token, password } = req.body;
-    const vendor = await Vendor.findOne({ passwordResetToken: token });
-
-    if (!vendor) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid reset token",
-      });
-    }
-
-    vendor.password = password;
-    vendor.passwordResetToken = undefined;
-    await vendor.save();
-
-    res.json({
-      success: true,
-      message: "Password reset successfully",
-    });
-  } catch (error) {
-    console.error("Vendor reset password error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-// Delivery Partner Authentication
-exports.deliveryRegister = async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { name, email, password, phone } = req.body;
-    const profilePicture = req.file ? req.file.path : undefined;
-
-    // Check if delivery partner exists
-    let deliveryPartner = await DeliveryPartner.findOne({ email });
-    if (deliveryPartner) {
-      return res.status(400).json({
-        success: false,
-        message: "Delivery partner already exists",
-      });
-    }
-
-    // Create delivery partner
-    deliveryPartner = new DeliveryPartner({
-      name,
-      email,
-      password,
-      phone,
-      profilePicture,
-    });
-
-    // Generate verification token
-    deliveryPartner.generateEmailVerificationToken();
-    await deliveryPartner.save();
-
-    // Send verification email
-    await sendEmail(
-      email,
-      "verificationEmail",
-      deliveryPartner.emailVerificationToken
-    );
-
-    res.status(201).json({
-      success: true,
-      message:
-        "Registration successful. Please check your email to verify your account.",
-    });
-  } catch (error) {
-    console.error("Delivery partner registration error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-exports.deliveryLogin = async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { email, password } = req.body;
-
-    // Check if delivery partner exists
-    const deliveryPartner = await DeliveryPartner.findOne({ email });
-    if (!deliveryPartner) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-      });
-    }
-
-    // Check password
-    const isMatch = await deliveryPartner.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-      });
-    }
-
-    // Check if email is verified
-    if (!deliveryPartner.isEmailVerified) {
-      return res.status(403).json({
-        success: false,
-        message: "Please verify your email address",
-      });
-    }
-
-    // Generate token
-    const token = generateToken(deliveryPartner._id, "delivery");
-
-    res.json({
-      success: true,
-      token,
-      deliveryPartner: {
-        id: deliveryPartner._id,
-        name: deliveryPartner.name,
-        email: deliveryPartner.email,
-        profilePicture: deliveryPartner.profilePicture,
-      },
-    });
-  } catch (error) {
-    console.error("Delivery partner login error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-exports.verifyDeliveryEmail = async (req, res) => {
-  try {
-    const { token } = req.params;
-    const deliveryPartner = await DeliveryPartner.findOne({
-      emailVerificationToken: token,
-    });
-
-    if (!deliveryPartner) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid verification token",
-      });
-    }
-
-    deliveryPartner.isEmailVerified = true;
-    deliveryPartner.emailVerificationToken = undefined;
-    await deliveryPartner.save();
-
-    res.json({
-      success: true,
-      message: "Email verified successfully",
-    });
-  } catch (error) {
-    console.error("Delivery partner email verification error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-exports.resendDeliveryVerification = async (req, res) => {
-  try {
-    const { email } = req.body;
-    const deliveryPartner = await DeliveryPartner.findOne({ email });
-
-    if (!deliveryPartner) {
-      return res.status(404).json({
-        success: false,
-        message: "Delivery partner not found",
-      });
-    }
-
-    if (deliveryPartner.isEmailVerified) {
-      return res.status(400).json({
-        success: false,
-        message: "Email is already verified",
-      });
-    }
-
-    deliveryPartner.generateEmailVerificationToken();
-    await deliveryPartner.save();
-
-    await sendEmail(
-      email,
-      "verificationEmail",
-      deliveryPartner.emailVerificationToken
-    );
-
-    res.json({
-      success: true,
-      message: "Verification email sent successfully",
-    });
-  } catch (error) {
-    console.error("Resend delivery partner verification error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-exports.deliveryForgotPassword = async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { email } = req.body;
-    const deliveryPartner = await DeliveryPartner.findOne({ email });
-
-    if (!deliveryPartner) {
-      return res.status(404).json({
-        success: false,
-        message: "Delivery partner not found",
-      });
-    }
-
-    deliveryPartner.generatePasswordResetToken();
-    await deliveryPartner.save();
-
-    await sendEmail(email, "resetPassword", deliveryPartner.passwordResetToken);
-
-    res.json({
-      success: true,
-      message: "Password reset email sent successfully",
-    });
-  } catch (error) {
-    console.error("Delivery partner forgot password error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-exports.deliveryResetPassword = async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { token, password } = req.body;
-    const deliveryPartner = await DeliveryPartner.findOne({
-      passwordResetToken: token,
-    });
-
-    if (!deliveryPartner) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid reset token",
-      });
-    }
-
-    deliveryPartner.password = password;
-    deliveryPartner.passwordResetToken = undefined;
-    await deliveryPartner.save();
-
-    res.json({
-      success: true,
-      message: "Password reset successfully",
-    });
-  } catch (error) {
-    console.error("Delivery partner reset password error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
+module.exports = authController;

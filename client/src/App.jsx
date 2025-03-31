@@ -53,7 +53,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 
 const App = () => {
   const dispatch = useDispatch();
-  const { isAuthenticated } = useSelector((state) => state.auth);
+  const { isAuthenticated, user } = useSelector((state) => state.auth);
 
   useEffect(() => {
     if (localStorage.getItem('token')) {
@@ -67,7 +67,7 @@ const App = () => {
       <main className="flex-grow">
         <Routes>
           {/* Public Routes */}
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<Menu />} />
           <Route path="/restaurants" element={<Restaurants />} />
           <Route path="/menu" element={<Menu />} />
           <Route path="/about" element={<About />} />
@@ -167,7 +167,7 @@ const App = () => {
           <Route
             path="/delivery/dashboard"
             element={
-              <ProtectedRoute allowedRoles={['deliveryBoy']}>
+              <ProtectedRoute allowedRoles={['delivery']}>
                 <DeliveryDashboard />
               </ProtectedRoute>
             }
@@ -175,7 +175,7 @@ const App = () => {
           <Route
             path="/delivery/orders"
             element={
-              <ProtectedRoute allowedRoles={['deliveryBoy']}>
+              <ProtectedRoute allowedRoles={['delivery']}>
                 <DeliveryOrders />
               </ProtectedRoute>
             }
@@ -183,7 +183,7 @@ const App = () => {
           <Route
             path="/delivery/profile"
             element={
-              <ProtectedRoute allowedRoles={['deliveryBoy']}>
+              <ProtectedRoute allowedRoles={['delivery']}>
                 <DeliveryProfile />
               </ProtectedRoute>
             }

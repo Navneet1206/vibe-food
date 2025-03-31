@@ -1,7 +1,7 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/user.model");
 const Vendor = require("../models/vendor.model");
-const DeliveryPartner = require("../models/delivery.model");
+const DeliveryPartner = require("../models/deliveryPartner.model");
 
 // Verify JWT token
 const verifyToken = (req, res, next) => {

@@ -34,39 +34,42 @@ const upload = multer({
   },
 });
 
-// Upload single image
-exports.uploadSingle = (fieldName) => upload.single(fieldName);
+const cloudinaryService = {
+  // Upload single image
+  uploadSingle: (fieldName) => upload.single(fieldName),
 
-// Upload multiple images
-exports.uploadMultiple = (fieldName, maxCount) =>
-  upload.array(fieldName, maxCount);
+  // Upload multiple images
+  uploadMultiple: (fieldName, maxCount) => upload.array(fieldName, maxCount),
 
-// Delete image from Cloudinary
-exports.deleteImage = async (publicId) => {
-  try {
-    await cloudinary.uploader.destroy(publicId);
-    return true;
-  } catch (error) {
-    console.error("Error deleting image:", error);
-    return false;
-  }
+  // Delete image from Cloudinary
+  deleteImage: async (publicId) => {
+    try {
+      await cloudinary.uploader.destroy(publicId);
+      return true;
+    } catch (error) {
+      console.error("Error deleting image:", error);
+      throw error;
+    }
+  },
+
+  // Get image URL
+  getImageUrl: (publicId, options = {}) => {
+    return cloudinary.url(publicId, options);
+  },
+
+  // Upload base64 image
+  uploadBase64: async (base64String, folder = "gatiyan-food") => {
+    try {
+      const result = await cloudinary.uploader.upload(base64String, {
+        folder,
+        resource_type: "auto",
+      });
+      return result;
+    } catch (error) {
+      console.error("Error uploading base64 image:", error);
+      throw error;
+    }
+  },
 };
 
-// Get image URL
-exports.getImageUrl = (publicId, options = {}) => {
-  return cloudinary.url(publicId, options);
-};
-
-// Upload base64 image
-exports.uploadBase64 = async (base64String, folder = "gatiyan-food") => {
-  try {
-    const result = await cloudinary.uploader.upload(base64String, {
-      folder,
-      resource_type: "auto",
-    });
-    return result;
-  } catch (error) {
-    console.error("Error uploading base64 image:", error);
-    throw error;
-  }
-};
+module.exports = cloudinaryService;

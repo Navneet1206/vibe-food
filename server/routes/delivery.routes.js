@@ -1,9 +1,12 @@
 const express = require("express");
 const router = express.Router();
 const { body } = require("express-validator");
-const { auth } = require("../middleware/delivery");
+const {
+  verifyToken,
+  isDeliveryPartner,
+} = require("../middleware/auth.middleware");
 const deliveryController = require("../controllers/delivery.controller");
-const upload = require("../middleware/upload");
+const cloudinaryService = require("../utils/cloudinary.service");
 
 // Validation middleware
 const registerValidation = [
@@ -36,14 +39,19 @@ const updateProfileValidation = [
 ];
 
 // Auth routes
-router.post("/register", registerValidation, deliveryController.register);
+router.post(
+  "/register",
+  registerValidation,
+  cloudinaryService.uploadSingle("profilePicture"),
+  deliveryController.register
+);
 router.post("/login", deliveryController.login);
 router.post("/verify-email/:token", deliveryController.verifyEmail);
 router.post("/forgot-password", deliveryController.forgotPassword);
 router.post("/reset-password", deliveryController.resetPassword);
 
 // Protected routes
-router.use(auth);
+router.use(verifyToken, isDeliveryPartner);
 
 // Profile routes
 router.get("/profile", deliveryController.getProfile);
@@ -53,34 +61,33 @@ router.put(
   deliveryController.updateProfile
 );
 router.put(
-  "/profile-picture",
-  upload.single("profilePicture"),
+  "/profile/picture",
+  cloudinaryService.uploadSingle("profilePicture"),
   deliveryController.updateProfilePicture
 );
 router.put("/location", deliveryController.updateLocation);
 router.put("/availability", deliveryController.updateAvailability);
-router.put("/online-status", deliveryController.updateOnlineStatus);
 
-// Orders routes
+// Order routes
 router.get("/orders", deliveryController.getOrders);
 router.get("/orders/:orderId", deliveryController.getOrderDetails);
 router.put("/orders/:orderId/status", deliveryController.updateOrderStatus);
-router.put("/orders/:orderId/pickup", deliveryController.pickupOrder);
-router.put("/orders/:orderId/deliver", deliveryController.deliverOrder);
-router.put("/orders/:orderId/cancel", deliveryController.cancelOrder);
+router.post("/orders/:orderId/pickup", deliveryController.pickupOrder);
+router.post("/orders/:orderId/deliver", deliveryController.deliverOrder);
+router.post("/orders/:orderId/cancel", deliveryController.cancelOrder);
 
 // Earnings routes
 router.get("/earnings", deliveryController.getEarnings);
-router.get("/earnings/today", deliveryController.getTodayEarnings);
-router.get("/earnings/week", deliveryController.getWeeklyEarnings);
-router.get("/earnings/month", deliveryController.getMonthlyEarnings);
+router.get("/earnings/daily", deliveryController.getDailyEarnings);
+router.get("/earnings/weekly", deliveryController.getWeeklyEarnings);
+router.get("/earnings/monthly", deliveryController.getMonthlyEarnings);
 
 // Bank details routes
-router.put("/bank-details", deliveryController.updateBankDetails);
 router.get("/bank-details", deliveryController.getBankDetails);
+router.put("/bank-details", deliveryController.updateBankDetails);
 
 // Analytics routes
 router.get("/analytics", deliveryController.getAnalytics);
-router.get("/analytics/performance", deliveryController.getPerformanceMetrics);
+router.get("/performance", deliveryController.getPerformance);
 
 module.exports = router;

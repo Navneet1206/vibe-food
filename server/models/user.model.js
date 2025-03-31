@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 
 const userSchema = new mongoose.Schema(
   {
@@ -22,11 +24,12 @@ const userSchema = new mongoose.Schema(
     },
     phone: {
       type: String,
+      required: true,
       trim: true,
     },
     profilePicture: {
       type: String,
-      default: null,
+      default: "",
     },
     address: {
       street: String,
@@ -43,6 +46,14 @@ const userSchema = new mongoose.Schema(
     emailVerificationExpires: Date,
     resetPasswordToken: String,
     resetPasswordExpires: Date,
+    tokens: [
+      {
+        token: {
+          type: String,
+          required: true,
+        },
+      },
+    ],
     role: {
       type: String,
       enum: ["user", "admin"],
@@ -86,32 +97,39 @@ const userSchema = new mongoose.Schema(
 
 // Hash password before saving
 userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
-
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error) {
-    next(error);
+  if (this.isModified("password")) {
+    this.password = await bcrypt.hash(this.password, 8);
   }
+  next();
 });
 
-// Method to compare password
-userSchema.methods.comparePassword = async function (candidatePassword) {
-  return bcrypt.compare(candidatePassword, this.password);
+// Generate auth token
+userSchema.methods.generateAuthToken = async function () {
+  const token = jwt.sign({ id: this._id.toString() }, process.env.JWT_SECRET, {
+    expiresIn: "7d",
+  });
+  this.tokens.push({ token });
+  await this.save();
+  return token;
 };
 
-// Method to generate email verification token
+// Generate email verification token
 userSchema.methods.generateEmailVerificationToken = function () {
-  this.emailVerificationToken = crypto.randomBytes(32).toString("hex");
+  const token = crypto.randomBytes(32).toString("hex");
+  this.emailVerificationToken = token;
   this.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
 };
 
-// Method to generate password reset token
+// Generate password reset token
 userSchema.methods.generatePasswordResetToken = function () {
-  this.resetPasswordToken = crypto.randomBytes(32).toString("hex");
-  this.resetPasswordExpires = Date.now() + 1 * 60 * 60 * 1000; // 1 hour
+  const token = crypto.randomBytes(32).toString("hex");
+  this.resetPasswordToken = token;
+  this.resetPasswordExpires = Date.now() + 60 * 60 * 1000; // 1 hour
+};
+
+// Compare password
+userSchema.methods.comparePassword = async function (password) {
+  return bcrypt.compare(password, this.password);
 };
 
 // Cart methods

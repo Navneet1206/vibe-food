@@ -10,21 +10,39 @@ const Menu = () => {
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [filteredItems, setFilteredItems] = useState([]);
     const [categories, setCategories] = useState([]);
+    const [cartItems, setCartItems] = useState([]);
+
+    useEffect(() => {
+        const savedCart = localStorage.getItem('cart');
+        if (savedCart) {
+            setCartItems(JSON.parse(savedCart));
+        }
+    }, []);
+
+    useEffect(() => {
+        localStorage.setItem('cart', JSON.stringify(cartItems));
+    }, [cartItems]);
 
     useEffect(() => {
         const fetchMenuItems = async () => {
             try {
-                const response = await axios.get(`${import.meta.env.VITE_API_URL}/menu`);
-                setMenuItems(response.data);
-                setFilteredItems(response.data);
+                const response = await axios.get(`${import.meta.env.VITE_API_URL}/restaurants/menu`);
+                if (response.data && Array.isArray(response.data)) {
+                    setMenuItems(response.data);
+                    setFilteredItems(response.data);
 
-                // Extract unique categories
-                const uniqueCategories = [...new Set(response.data.map(item => item.category))];
-                setCategories(uniqueCategories);
-
+                    // Extract unique categories
+                    const uniqueCategories = [...new Set(response.data.map(item => item.category))];
+                    setCategories(uniqueCategories);
+                } else {
+                    setMenuItems([]);
+                    setFilteredItems([]);
+                    setCategories([]);
+                }
                 setLoading(false);
             } catch (err) {
-                setError('Failed to fetch menu items');
+                console.error('Error fetching menu items:', err);
+                setError('Failed to fetch menu items. Please try again later.');
                 setLoading(false);
             }
         };
@@ -33,6 +51,11 @@ const Menu = () => {
     }, []);
 
     useEffect(() => {
+        if (!Array.isArray(menuItems)) {
+            setFilteredItems([]);
+            return;
+        }
+
         let filtered = menuItems;
 
         // Apply search filter
@@ -50,6 +73,21 @@ const Menu = () => {
 
         setFilteredItems(filtered);
     }, [searchTerm, selectedCategory, menuItems]);
+
+    const addToCart = (item) => {
+        const existingItem = cartItems.find(cartItem => cartItem._id === item._id);
+        if (existingItem) {
+            setCartItems(prevItems =>
+                prevItems.map(cartItem =>
+                    cartItem._id === item._id
+                        ? { ...cartItem, quantity: cartItem.quantity + 1 }
+                        : cartItem
+                )
+            );
+        } else {
+            setCartItems(prevItems => [...prevItems, { ...item, quantity: 1 }]);
+        }
+    };
 
     if (loading) {
         return (
@@ -79,8 +117,6 @@ const Menu = () => {
         <div className="container mx-auto px-4 py-8">
             <div className="mb-8">
                 <h1 className="text-3xl font-bold text-gray-900 mb-4">Our Menu</h1>
-
-                {/* Search and Category Filters */}
                 <div className="flex flex-col md:flex-row gap-4 mb-6">
                     <div className="relative flex-1">
                         <input
@@ -104,7 +140,6 @@ const Menu = () => {
                             />
                         </svg>
                     </div>
-
                     <select
                         className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                         value={selectedCategory}
@@ -121,52 +156,41 @@ const Menu = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredItems.map((item) => (
+                {Array.isArray(filteredItems) && filteredItems.map((item) => (
                     <div
                         key={item._id}
                         className="bg-white rounded-lg shadow-soft overflow-hidden hover:shadow-lg transition-shadow duration-300"
                     >
                         <div className="relative h-48">
                             <img
-                                src={item.image || 'https://via.placeholder.com/400x200'}
+                                src={item.image || '/images/menu-placeholder.jpg'}
                                 alt={item.name}
                                 className="w-full h-full object-cover"
                             />
                             {item.isVeg && (
-                                <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded-full text-sm">
+                                <span className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded-full text-sm">
                                     Veg
-                                </div>
+                                </span>
                             )}
                         </div>
                         <div className="p-4">
-                            <div className="flex justify-between items-start mb-2">
-                                <h2 className="text-xl font-semibold text-gray-900">
-                                    {item.name}
-                                </h2>
-                                <span className="text-primary font-semibold">
-                                    ₹{item.price}
-                                </span>
-                            </div>
-                            <p className="text-gray-600 text-sm mb-4">
-                                {item.description}
-                            </p>
+                            <h2 className="text-xl font-semibold text-gray-900 mb-2">{item.name}</h2>
+                            <p className="text-gray-600 mb-2">{item.description}</p>
                             <div className="flex items-center justify-between">
-                                <span className="text-sm text-gray-500">
-                                    {item.category}
-                                </span>
-                                <Link
-                                    to={`/restaurants/${item.restaurantId}`}
-                                    className="text-primary hover:text-primary-dark text-sm font-medium"
+                                <span className="text-primary font-semibold">₹{item.price}</span>
+                                <button
+                                    onClick={() => addToCart(item)}
+                                    className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-dark transition-colors"
                                 >
-                                    View Restaurant
-                                </Link>
+                                    Add to Cart
+                                </button>
                             </div>
                         </div>
                     </div>
                 ))}
             </div>
 
-            {filteredItems.length === 0 && (
+            {(!Array.isArray(filteredItems) || filteredItems.length === 0) && (
                 <div className="text-center py-12">
                     <p className="text-gray-500 text-lg">
                         No menu items found matching your search.
