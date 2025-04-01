@@ -1,130 +1,216 @@
 # GatiyanFood - Food Delivery Platform
 
-A full-stack food delivery platform built with the MERN stack (MongoDB, Express.js, React.js, Node.js).
-
-## Features
-
-### User Module
-- Email verification using Nodemailer
-- Profile management with Cloudinary image upload
-- Restaurant browsing and menu viewing
-- Cart management and secure checkout
-- Real-time order tracking
-- Review system for completed orders
-
-### Vendor Module
-- Email verification and document upload
-- Menu management with Cloudinary integration
-- Order management system
-- Analytics dashboard
-
-### Delivery Module
-- Delivery partner registration
-- Order assignment system
-- Real-time status updates
-- GPS tracking (optional)
-
-### Admin Module
-- Centralized dashboard
-- User, vendor, and delivery partner management
-- Order lifecycle management
-- Payment reconciliation
-- Content and promotion management
-
-## Tech Stack
-
-- **Frontend**: React.js, Redux Toolkit, Material-UI
-- **Backend**: Node.js, Express.js
-- **Database**: MongoDB
-- **Authentication**: JWT
-- **File Storage**: Cloudinary
-- **Email Service**: Nodemailer
-- **Real-time Updates**: Polling mechanism
+GatiyanFood is a full-stack food delivery platform built using the MERN stack (MongoDB, Express.js, React.js, Node.js). The platform is designed to provide a seamless experience for all stakeholders—users, vendors, delivery partners, and administrators—by integrating real-time order tracking, secure transactions, and comprehensive management tools.
 
 ## Project Structure
 
 ```
-gatiyan-food/
-├── client/                 # Frontend React application
-│   ├── public/
-│   └── src/
-│       ├── components/    # Reusable UI components
-│       ├── pages/        # Page components
-│       ├── features/     # Redux slices and features
-│       ├── services/     # API services
-│       └── utils/        # Utility functions
-├── server/                # Backend Node.js application
-│   ├── config/          # Configuration files
-│   ├── controllers/     # Route controllers
-│   ├── middleware/      # Custom middleware
-│   ├── models/         # MongoDB models
-│   ├── routes/         # API routes
-│   ├── services/       # Business logic
-│   └── utils/          # Utility functions
-└── package.json
+vibe-food/
+├── admin-portal/        # Admin dashboard frontend
+├── backend/            # Backend API server
+├── restaurant-portal/  # Restaurant management frontend
+└── user-portal/        # Customer frontend
 ```
 
-## Getting Started
+## Features
 
-### Prerequisites
+### 1. User Module
+- Account & Profile Management
+  - Email verification with OTP
+  - Profile settings
+  - Address management
+  - Payment methods
+- Browsing & Ordering
+  - Restaurant browsing
+  - Menu viewing
+  - Cart management
+  - Secure checkout
+- Order Tracking & History
+  - Real-time tracking
+  - Order history
+  - Delivery partner details
+  - Rating & review system
+- Wishlist/Favorites
+- Order cancellation & refunds
+
+### 2. Vendor Module
+- Registration & Verification
+  - Email verification
+  - Document uploads
+  - Admin approval
+- Menu & Order Management
+  - Menu management
+  - Order lifecycle
+  - Delivery partner assignment
+- Analytics & Reporting
+  - Sales analytics
+  - Revenue reports
+  - Promotions management
+- Store Operations
+  - Status management
+  - Review responses
+
+### 3. Delivery Module
+- Partner Registration
+  - Document verification
+  - Admin approval
+- Order Management
+  - Order assignment
+  - GPS tracking
+  - Status updates
+- Payment & Delivery
+  - Payment management
+  - Delivery confirmation
+- Performance Tracking
+  - Delivery metrics
+  - Dispute resolution
+
+### 4. Admin Module
+- Dashboard
+  - User management
+  - Vendor management
+  - Delivery partner management
+- Order & Payment
+  - Order monitoring
+  - Payment reconciliation
+- Content Management
+  - Promotions
+  - Discounts
+- System Management
+  - Security
+  - Logging
+  - Monitoring
+
+## Tech Stack
+
+### Frontend
+- React.js
+- Redux Toolkit
+- Material-UI
+- Tailwind CSS
+- Socket.IO Client
+
+### Backend
+- Node.js
+- Express.js
+- MongoDB
+- Mongoose
+- JWT Authentication
+- Socket.IO
+- Razorpay Integration
+- Multer for file uploads
+
+## Prerequisites
 
 - Node.js (v14 or higher)
 - MongoDB
-- Cloudinary account
+- Razorpay account
 - SMTP server for email verification
 
-### Installation
+## Environment Variables
 
-1. Clone the repository
-```bash
-git clone https://github.com/yourusername/gatiyan-food.git
-cd gatiyan-food
+### Backend (.env)
+```
+PORT=5000
+MONGODB_URI=mongodb://localhost:27017/food-delivery
+JWT_SECRET=your_jwt_secret_key_here
+JWT_EXPIRE=7d
+FRONTEND_URL=http://localhost:5173
+NODE_ENV=development
+
+# Razorpay Configuration
+RAZORPAY_KEY_ID=your_razorpay_key_id_here
+RAZORPAY_KEY_SECRET=your_razorpay_key_secret_here
+RAZORPAY_WEBHOOK_SECRET=your_razorpay_webhook_secret_here
+
+# File Upload Configuration
+MAX_FILE_SIZE=5242880 # 5MB in bytes
+UPLOAD_PATH=uploads
+
+# Commission Rates (in percentage)
+PLATFORM_COMMISSION=10
+RESTAURANT_COMMISSION=90
+DELIVERY_PARTNER_COMMISSION=80
 ```
 
-2. Install dependencies
+## Installation
+
+1. Clone the repository:
 ```bash
-# Install backend dependencies
-cd server
+git clone https://github.com/yourusername/gatiyanfood.git
+cd gatiyanfood
+```
+
+2. Install backend dependencies:
+```bash
+cd backend
+npm install
+```
+
+3. Install frontend dependencies:
+```bash
+# User Portal
+cd ../user-portal
 npm install
 
-# Install frontend dependencies
-cd ../client
+# Restaurant Portal
+cd ../restaurant-portal
+npm install
+
+# Admin Portal
+cd ../admin-portal
 npm install
 ```
 
-3. Set up environment variables
-```bash
-# In server directory
-cp .env.example .env
-# Edit .env with your configuration
+4. Set up environment variables:
+- Copy `.env.example` to `.env` in each directory
+- Update the variables with your values
 
-# In client directory
-cp .env.example .env
-# Edit .env with your configuration
-```
+5. Start the development servers:
 
-4. Start the development servers
+Backend:
 ```bash
-# Start backend server
-cd server
+cd backend
 npm run dev
+```
 
-# Start frontend server
-cd client
-npm start
+User Portal:
+```bash
+cd user-portal
+npm run dev
+```
+
+Restaurant Portal:
+```bash
+cd restaurant-portal
+npm run dev
+```
+
+Admin Portal:
+```bash
+cd admin-portal
+npm run dev
 ```
 
 ## API Documentation
 
-API documentation is available at `/api-docs` when running the server.
+The API documentation is available at `/api-docs` when running the backend server.
+
+## Testing
+
+Run tests:
+```bash
+cd backend
+npm test
+```
 
 ## Contributing
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a new Pull Request
 
 ## License
 
